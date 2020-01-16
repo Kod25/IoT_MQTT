@@ -45,6 +45,16 @@ public class MQTTBroker implements Runnable{
         return header;
     }
 
+    static byte[] createSubAck(byte[] id) {
+        byte[] header = new byte[5];
+        header[0] = (byte) 176;
+        header[1] = (byte) 2;
+        header[2] = id[0];
+        header[3] = id[1];
+        header[4] = id[2];
+        return header;
+    }
+
     static boolean parse(byte[] header, byte[] data, BufferedOutputStream out, long threadId) throws IOException {
 
         int type = (header[0] >> 4) & 0x0F;
@@ -58,10 +68,11 @@ public class MQTTBroker implements Runnable{
             case 3:
                 break;
             case 8:
-                parseSubscribeMessage(data, threadId);
+                byte[] subId = parseSubscribeMessage(data, threadId);
+                sendMessage(createSubAck(subId), out);
                 break;
             case 10:
-                byte[] unSubId = parseUnSubscribeMessage(header, data);
+                byte[] unSubId = parseUnSubscribeMessage(header, data, threadId);
                 sendMessage(createUnSubAck(unSubId), out);
                 break;
             case 12:
@@ -69,6 +80,7 @@ public class MQTTBroker implements Runnable{
                 sendMessage(createPong(), out);
                 break;
             case 14:
+                //Disconnect is handled with the false outside the parse function
                 return false;
         }
         return true;
@@ -91,7 +103,7 @@ public class MQTTBroker implements Runnable{
         System.out.println("Protocol namn: " + new String(clientId));
     }
 
-    static byte[] parseUnSubscribeMessage(byte[] header, byte[] data) {
+    static byte[] parseUnSubscribeMessage(byte[] header, byte[] data, long threadId) {
         byte[] id = new byte[2];
         id[0] = data[0];
         id[1] = data[1];
@@ -102,20 +114,13 @@ public class MQTTBroker implements Runnable{
             pos += 2;
             byte[] topic = Arrays.copyOfRange(data, pos, pos + tLen);
             pos += tLen;
-            //unSubscribe(topic);
-
+            topicUserList.remove(topic, threadId);
         }
         return id;
     }
 
-    static void sendMessage(byte[] data, BufferedOutputStream out) throws IOException {
-        out.write(data, 0, data.length);
-        out.flush();
-        return;
-    }
-
     static byte[] parseSubscribeMessage(byte[] data, long threadId){
-        byte [] id = new byte[2];
+        byte [] id = new byte[3];
         id[0] = data[0];
         id[1] = data[1];
         int pos = 2;
@@ -126,13 +131,22 @@ public class MQTTBroker implements Runnable{
             byte[] topic = Arrays.copyOfRange(data, pos, tLen);
             byte qos = (byte) 0;
             pos += tLen+1;
-
-            topicUserList.put(topic, threadId);
-
+            if(topicUserList.put(topic, threadId) != null) {
+                id[2] = (byte) 0x00;
+            } else {
+                id[2] = (byte) 0x80;
+            }
         }
-
-
+        return id;
     }
+
+
+    static void sendMessage(byte[] data, BufferedOutputStream out) throws IOException {
+        out.write(data, 0, data.length);
+        out.flush();
+        return;
+    }
+
 
     boolean additionalHeaderByte(byte data) {
         return ((data & 0x80) > 0 );
