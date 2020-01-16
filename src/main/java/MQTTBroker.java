@@ -6,12 +6,15 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 
 public class MQTTBroker implements Runnable{
 
     static final int PORT = 1883;
 
     private Socket connect;
+
+    private HashMap<Integer, String> topicUserList = new HashMap<Integer, String> ();
 
     public MQTTBroker(Socket c){
         connect = c;
@@ -42,9 +45,11 @@ public class MQTTBroker implements Runnable{
         return header;
     }
 
-    static boolean parse(byte[] header, byte[] data, BufferedOutputStream out) throws IOException {
+    static boolean parse(byte[] header, byte[] data, BufferedOutputStream out, long threadId) throws IOException {
+
         int type = (header[0] >> 4) & 0x0F;
         System.out.println("Message type: " + type);
+        System.out.println("Thread: " + threadId);
         switch (type) {
             case 1:
                 parseConnectionMessage(header, data);
@@ -160,7 +165,8 @@ public class MQTTBroker implements Runnable{
                 if (check != bodyLength) {
                     throw new RuntimeException("Kunde inte läsa hela");
                 }
-                running = parse(header, data, out);
+                long threadId = Thread.currentThread().getId();
+                running = parse(header, data, out, threadId);
 
             } catch (Exception e) {
                 System.err.println(e);
