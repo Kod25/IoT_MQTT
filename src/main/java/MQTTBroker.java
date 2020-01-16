@@ -36,7 +36,17 @@ public class MQTTBroker implements Runnable{
         return header;
     }
 
+    static byte[] createUnSubAck(byte[] id) {
+        byte[] header = new byte[4];
+        header[0] = (byte) 176;
+        header[1] = (byte) 2;
+        header[2] = id[0];
+        header[3] = id[1];
+        return header;
+    }
+
     static boolean parse(byte[] header, byte[] data, BufferedOutputStream out, long threadId) throws IOException {
+
         int type = (header[0] >> 4) & 0x0F;
         System.out.println("Message type: " + type);
         System.out.println("Thread: " + threadId);
@@ -50,6 +60,8 @@ public class MQTTBroker implements Runnable{
             case 8:
                 break;
             case 10:
+                byte[] unSubId = parseUnSubscribeMessage(header, data);
+                sendMessage(createUnSubAck(unSubId), out);
                 break;
             case 12:
                 System.out.println("Ping");
@@ -78,6 +90,23 @@ public class MQTTBroker implements Runnable{
         System.out.println("Protocol namn: " + new String(clientId));
     }
 
+    static byte[] parseUnSubscribeMessage(byte[] header, byte[] data) {
+        byte[] id = new byte[2];
+        id[0] = data[0];
+        id[1] = data[1];
+        int pos = 2;
+        while(pos < data.length) {
+            int tLen = (int) data[pos] & 0xFF << 8;
+            tLen += (int) data[pos + 1] & 0xFF;
+            pos += 2;
+            byte[] topic = Arrays.copyOfRange(data, pos, pos + tLen);
+            pos += tLen;
+            //unSubscribe(topic);
+
+        }
+        return id;
+    }
+
     static void sendMessage(byte[] data, BufferedOutputStream out) throws IOException {
         out.write(data, 0, data.length);
         out.flush();
@@ -93,10 +122,9 @@ public class MQTTBroker implements Runnable{
             final ServerSocket server = new ServerSocket(PORT);
             System.out.println("listening");
             while (true) {
+
                 MQTTBroker myServer = new MQTTBroker(server.accept());
-
                 System.out.println("Connection opened. (" + new Date() + ")");
-
                 Thread thread = new Thread(myServer);
                 thread.start();
             }
