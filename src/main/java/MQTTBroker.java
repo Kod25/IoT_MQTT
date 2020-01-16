@@ -14,7 +14,7 @@ public class MQTTBroker implements Runnable{
 
     private Socket connect;
 
-    private HashMap<Integer, String> topicUserList = new HashMap<Integer, String> ();
+    static HashMap<byte[], Long> topicUserList = new HashMap<byte[], Long> ();
 
     public MQTTBroker(Socket c){
         connect = c;
@@ -48,6 +48,7 @@ public class MQTTBroker implements Runnable{
             case 3:
                 break;
             case 8:
+                parseSubscribeMessage(data, threadId);
                 break;
             case 10:
                 break;
@@ -82,6 +83,26 @@ public class MQTTBroker implements Runnable{
         out.write(data, 0, data.length);
         out.flush();
         return;
+    }
+
+    static byte[] parseSubscribeMessage(byte[] data, long threadId){
+        byte [] id = new byte[2];
+        id[0] = data[0];
+        id[1] = data[1];
+        int pos = 2;
+        while(pos<data.length) {
+            int tLen = (int) data[pos] & 0xFF << 8;
+            tLen += (int) data[pos+1] & 0xFF;
+            pos += 2;
+            byte[] topic = Arrays.copyOfRange(data, pos, tLen);
+            byte qos = (byte) 0;
+            pos += tLen+1;
+
+            topicUserList.put(topic, threadId);
+
+        }
+
+
     }
 
     boolean additionalHeaderByte(byte data) {
