@@ -26,8 +26,19 @@ public class MQTTBroker implements Runnable{
         return header;
     }
 
+    static byte[] createPong() {
+        byte[] header = new byte[2];
+        header[0] = (byte) 208;
+        header[1] = (byte) 0;
+        return header;
+    }
+
     static void parse(byte[] header, byte[] data, BufferedOutputStream out) throws IOException {
-        int type = header[0] >> 4;
+        int type = (header[0] >> 4) & 0x0F;
+        for(int i = 0; i < header.length; i++) {
+            System.out.println(header[i]);
+        }
+        System.out.println("header end");
         System.out.println(type);
         switch (type) {
             case 1:
@@ -41,6 +52,8 @@ public class MQTTBroker implements Runnable{
             case 10:
                 break;
             case 12:
+                System.out.println("Ping");
+                sendMessage(createPong(), out);
                 break;
         }
     }
@@ -94,37 +107,38 @@ public class MQTTBroker implements Runnable{
     public void run() {
         BufferedInputStream in = null;
         BufferedOutputStream out = null;
+        boolean running = true;
+        while (true) {
+            try {
+                in = new BufferedInputStream(connect.getInputStream());
+                out = new BufferedOutputStream(connect.getOutputStream());
+                while (connect.getInputStream().available() == 0) {
 
-        try {
-            in = new BufferedInputStream(connect.getInputStream());
-            out = new BufferedOutputStream(connect.getOutputStream());
-            while(connect.getInputStream().available() == 0) {
-
-            }
-            byte[] header = new byte[5];
-            int readHeaderBytes = 2;
+                }
+                byte[] header = new byte[5];
+                int readHeaderBytes = 2;
 
 
-            in.read(header, 0, 2);
-            while(additionalHeaderByte(header[readHeaderBytes - 1]) && readHeaderBytes < 6) {
-                header[readHeaderBytes] = (byte) in.read();
-                readHeaderBytes += 1;
-            }
-            int bodyLength = header[1] & 0x7F;
-            bodyLength += (int) (header[2] & 0x7F) << 7;
-            bodyLength += (int) (header[3] & 0x7F) << 14;
-            bodyLength += (int) (header[4] & 0x7F) << 21;
+                in.read(header, 0, 2);
+                while (additionalHeaderByte(header[readHeaderBytes - 1]) && readHeaderBytes < 6) {
+                    header[readHeaderBytes] = (byte) in.read();
+                    readHeaderBytes += 1;
+                }
+                int bodyLength = header[1] & 0x7F;
+                bodyLength += (int) (header[2] & 0x7F) << 7;
+                bodyLength += (int) (header[3] & 0x7F) << 14;
+                bodyLength += (int) (header[4] & 0x7F) << 21;
 
-            byte[] data = new byte[bodyLength];
-            int check = in.read(data, 0, bodyLength);
-            if(check != bodyLength) {
-                throw new RuntimeException("Kunde inte läsa hela");
-            }
-            parse(header, data, out);
+                byte[] data = new byte[bodyLength];
+                int check = in.read(data, 0, bodyLength);
+                if (check != bodyLength) {
+                    throw new RuntimeException("Kunde inte läsa hela");
+                }
+                parse(header, data, out);
 
-        }catch (Exception e){
-        System.err.println(e);
-        }/*finally{
+            } catch (Exception e) {
+                System.err.println(e);
+            }/*finally{
             try {
                 connect.close(); // we close socket connection
             } catch (Exception e) {
@@ -133,5 +147,6 @@ public class MQTTBroker implements Runnable{
 
             System.out.println("Connection closed.\n");
         }*/
+        }
     }
 }
