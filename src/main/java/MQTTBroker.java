@@ -1,4 +1,5 @@
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
@@ -25,12 +26,13 @@ public class MQTTBroker implements Runnable{
         return header;
     }
 
-    static void parse(byte[] header, byte[] data) {
+    static void parse(byte[] header, byte[] data, BufferedOutputStream out) throws IOException {
         int type = header[0] >> 4;
         System.out.println(type);
         switch (type) {
             case 1:
                 parseConnectionMessage(header, data);
+                sendMessage(createConAck(), out);
                 break;
             case 3:
                 break;
@@ -60,6 +62,12 @@ public class MQTTBroker implements Runnable{
         System.out.println("Protocol namn: " + new String(clientId));
     }
 
+    static void sendMessage(byte[] data, BufferedOutputStream out) throws IOException {
+        out.write(data, 0, data.length);
+        out.flush();
+        return;
+    }
+
     boolean additionalHeaderByte(byte data) {
         return ((data & 0x80) > 0 );
     }
@@ -85,9 +93,11 @@ public class MQTTBroker implements Runnable{
     //@Override
     public void run() {
         BufferedInputStream in = null;
+        BufferedOutputStream out = null;
 
         try {
             in = new BufferedInputStream(connect.getInputStream());
+            out = new BufferedOutputStream(connect.getOutputStream());
             while(connect.getInputStream().available() == 0) {
 
             }
@@ -110,7 +120,7 @@ public class MQTTBroker implements Runnable{
             if(check != bodyLength) {
                 throw new RuntimeException("Kunde inte läsa hela");
             }
-            parse(header, data);
+            parse(header, data, out);
 
         }catch (Exception e){
         System.err.println(e);
