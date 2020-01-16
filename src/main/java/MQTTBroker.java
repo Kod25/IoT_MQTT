@@ -33,13 +33,9 @@ public class MQTTBroker implements Runnable{
         return header;
     }
 
-    static void parse(byte[] header, byte[] data, BufferedOutputStream out) throws IOException {
+    static boolean parse(byte[] header, byte[] data, BufferedOutputStream out) throws IOException {
         int type = (header[0] >> 4) & 0x0F;
-        for(int i = 0; i < header.length; i++) {
-            System.out.println(header[i]);
-        }
-        System.out.println("header end");
-        System.out.println(type);
+        System.out.println("Message type: " + type);
         switch (type) {
             case 1:
                 parseConnectionMessage(header, data);
@@ -55,7 +51,10 @@ public class MQTTBroker implements Runnable{
                 System.out.println("Ping");
                 sendMessage(createPong(), out);
                 break;
+            case 14:
+                return false;
         }
+        return true;
     }
 
     static void parseConnectionMessage(byte[] header, byte[] data) {
@@ -108,7 +107,7 @@ public class MQTTBroker implements Runnable{
         BufferedInputStream in = null;
         BufferedOutputStream out = null;
         boolean running = true;
-        while (true) {
+        while (running) {
             try {
                 in = new BufferedInputStream(connect.getInputStream());
                 out = new BufferedOutputStream(connect.getOutputStream());
@@ -134,7 +133,7 @@ public class MQTTBroker implements Runnable{
                 if (check != bodyLength) {
                     throw new RuntimeException("Kunde inte läsa hela");
                 }
-                parse(header, data, out);
+                running = parse(header, data, out);
 
             } catch (Exception e) {
                 System.err.println(e);
@@ -144,9 +143,14 @@ public class MQTTBroker implements Runnable{
             } catch (Exception e) {
                 System.err.println("Error closing stream : " + e.getMessage());
             }
-
             System.out.println("Connection closed.\n");
         }*/
         }
+        try {
+            connect.close(); // we close socket connection
+        } catch (Exception e) {
+            System.err.println("Error closing stream : " + e.getMessage());
+        }
+        System.out.println("Connection closed.\n");
     }
 }
