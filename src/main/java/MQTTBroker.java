@@ -46,19 +46,19 @@ public class MQTTBroker implements Runnable{
     }
 
     static void parseConnectionMessage(byte[] header, byte[] data) {
-        int pLen = data[1] & 0xFF;
-        pLen += (int) (data[2] & 0xFF) >> 8;
+        int pLen = (int) data[0] & 0xFF << 8;
+        pLen += (int) data[1] & 0xFF;
         System.out.println("protocol len: " + pLen);
         byte[] pName = Arrays.copyOfRange(data, 2, 2 + pLen);
         System.out.println("Protocol namn: " + new String(pName));
         System.out.println("protocol level: " + data[2+pLen]);
-        int keepAlive = data[pLen + 4] & 0xFF;
-        keepAlive += (int) (data[pLen + 5] & 0xFF) >> 8;
-        System.out.println("Keep Alive: "+keepAlive);
-        int clientIdLength = data[pLen + 6] & 0xFF;
-        clientIdLength += (int) (data[pLen +7] & 0xFF) >> 8;
+        int keepAlive = (int) data[pLen + 4] & 0xFF << 8;
+        keepAlive += (int) data[pLen + 5] & 0xFF;
+        System.out.println("Keep Alive: " + keepAlive);
+        int clientIdLength = (int) data[pLen + 6] & 0xFF << 8;
+        clientIdLength += (int) data[pLen +7] & 0xFF;
         System.out.println("client length: "+clientIdLength);
-        byte[] clientId = Arrays.copyOfRange(data,pLen+8 ,data.length-1);
+        byte[] clientId = Arrays.copyOfRange(data,pLen+8 ,data.length);
         System.out.println("Protocol namn: " + new String(clientId));
     }
 
@@ -124,7 +124,7 @@ public class MQTTBroker implements Runnable{
 
         }catch (Exception e){
         System.err.println(e);
-        }finally{
+        }/*finally{
             try {
                 connect.close(); // we close socket connection
             } catch (Exception e) {
@@ -132,6 +132,6 @@ public class MQTTBroker implements Runnable{
             }
 
             System.out.println("Connection closed.\n");
-        }
+        }*/
     }
 }
