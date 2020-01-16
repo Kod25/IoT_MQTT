@@ -3,6 +3,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.Date;
 
 public class MQTTBroker implements Runnable{
@@ -39,12 +40,24 @@ public class MQTTBroker implements Runnable{
                 break;
             case 12:
                 break;
-
         }
     }
 
     static void parseConnectionMessage(byte[] header, byte[] data) {
-
+        int pLen = data[1] & 0xFF;
+        pLen += (int) (data[2] & 0xFF) >> 8;
+        System.out.println("protocol len: " + pLen);
+        byte[] pName = Arrays.copyOfRange(data, 2, 2 + pLen);
+        System.out.println("Protocol namn: " + new String(pName));
+        System.out.println("protocol level: " + data[2+pLen]);
+        int keepAlive = data[pLen + 4] & 0xFF;
+        keepAlive += (int) (data[pLen + 5] & 0xFF) >> 8;
+        System.out.println("Keep Alive: "+keepAlive);
+        int clientIdLength = data[pLen + 6] & 0xFF;
+        clientIdLength += (int) (data[pLen +7] & 0xFF) >> 8;
+        System.out.println("client length: "+clientIdLength);
+        byte[] clientId = Arrays.copyOfRange(data,pLen+8 ,data.length-1);
+        System.out.println("Protocol namn: " + new String(clientId));
     }
 
     boolean additionalHeaderByte(byte data) {
