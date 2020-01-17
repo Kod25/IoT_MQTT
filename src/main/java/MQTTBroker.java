@@ -50,8 +50,8 @@ public class MQTTBroker implements Runnable{
 
     static byte[] createSubAck(byte[] id) {
         byte[] header = new byte[5];
-        header[0] = (byte) 176;
-        header[1] = (byte) 2;
+        header[0] = (byte) 144;
+        header[1] = (byte) 3;
         header[2] = id[0];
         header[3] = id[1];
         header[4] = id[2];
@@ -72,10 +72,14 @@ public class MQTTBroker implements Runnable{
                 parsePublishMessage(header, data, threadId);
                 break;
             case 8:
+                System.out.println("Message type: " + type);
+                System.out.println("Thread: " + threadId);
                 byte[] subId = parseSubscribeMessage(data, threadId);
                 sendMessage(createSubAck(subId), out);
                 break;
             case 10:
+                System.out.println("Message type: " + type);
+                System.out.println("Thread: " + threadId);
                 byte[] unSubId = parseUnSubscribeMessage(header, data, threadId);
                 sendMessage(createUnSubAck(unSubId), out);
                 break;
@@ -150,15 +154,35 @@ public class MQTTBroker implements Runnable{
     }
 
     static void parsePublishMessage(byte[] header, byte[] data, long threadId) {
+        int removeBytes = 0;
+        for(int i = 0; i < 3; i++) {
+            if(header[4-i] == 0x00) {
+                removeBytes += 1;
+            }
+        }
+        byte[] trueHeader = new byte[5-removeBytes];
+        for(int i = 0; i < trueHeader.length; i++) {
+            trueHeader[i] = header[i];
+        }
         int tLen = (int) data[0] & 0xFF << 8;
         tLen += (int) data[1] & 0xFF;
         byte[] topic = Arrays.copyOfRange(data, 2, tLen);
-        ArrayList<Long> list = topicUserList.get(topic);
-        byte[] message = new byte[header.length + data.length];
-        System.arraycopy(header, 0, message, 0, header.length);
-        System.arraycopy(data, 0, message, header.length, data.length);
-        for(int i = 0; i < list.size(); i++) {
-            threadSendList.put(list.get(i), message);
+        ArrayList<Long> list;
+        if((list = topicUserList.get(topic)) != null){
+            topicUserList.put(topic, new ArrayList<Long>());
+            return;
+        }
+        System.out.println("AsssA");
+        byte[] message = new byte[trueHeader.length + data.length];
+
+        System.arraycopy(header, 0, message, 0, trueHeader.length);
+        System.arraycopy(data, 0, message, trueHeader.length, data.length);
+        System.out.println(trueHeader.length);
+        System.out.println(message[2]);
+        if(list != null) {
+            for (int i = 0; i < list.size(); i++) {
+                threadSendList.put(list.get(i), message);
+            }
         }
         return;
     }
