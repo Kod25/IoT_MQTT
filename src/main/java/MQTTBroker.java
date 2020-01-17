@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
@@ -14,7 +15,9 @@ public class MQTTBroker implements Runnable{
 
     private Socket connect;
 
-    static HashMap<byte[], Long> topicUserList = new HashMap<byte[], Long> ();
+    static HashMap<byte[], ArrayList<Long>> topicUserList = new HashMap<byte[], ArrayList<Long>> ();
+
+    static HashMap<Long, byte[]> threadSendList = new HashMap<Long, byte[]> ();
 
     public MQTTBroker(Socket c){
         connect = c;
@@ -58,14 +61,15 @@ public class MQTTBroker implements Runnable{
     static boolean parse(byte[] header, byte[] data, BufferedOutputStream out, long threadId) throws IOException {
 
         int type = (header[0] >> 4) & 0x0F;
-        System.out.println("Message type: " + type);
-        System.out.println("Thread: " + threadId);
         switch (type) {
             case 1:
                 parseConnectionMessage(header, data);
                 sendMessage(createConAck(), out);
                 break;
             case 3:
+                System.out.println("Message type: " + type);
+                System.out.println("Thread: " + threadId);
+                parsePublishMessage(header, data, threadId);
                 break;
             case 8:
                 byte[] subId = parseSubscribeMessage(data, threadId);
@@ -76,7 +80,7 @@ public class MQTTBroker implements Runnable{
                 sendMessage(createUnSubAck(unSubId), out);
                 break;
             case 12:
-                System.out.println("Ping");
+                //System.out.println("Ping");
                 sendMessage(createPong(), out);
                 break;
             case 14:
@@ -114,7 +118,9 @@ public class MQTTBroker implements Runnable{
             pos += 2;
             byte[] topic = Arrays.copyOfRange(data, pos, pos + tLen);
             pos += tLen;
-            topicUserList.remove(topic, threadId);
+            ArrayList<Long> list = topicUserList.get(topic);
+            list.remove(threadId);
+            topicUserList.replace(topic, list);
         }
         return id;
     }
@@ -131,13 +137,30 @@ public class MQTTBroker implements Runnable{
             byte[] topic = Arrays.copyOfRange(data, pos, tLen);
             byte qos = (byte) 0;
             pos += tLen+1;
-            if(topicUserList.put(topic, threadId) != null) {
+            ArrayList<Long> list;
+            if((list = topicUserList.get(topic)) != null) {
+                list.add(threadId);
+                topicUserList.replace(topic, list);
                 id[2] = (byte) 0x00;
             } else {
                 id[2] = (byte) 0x80;
             }
         }
         return id;
+    }
+
+    static void parsePublishMessage(byte[] header, byte[] data, long threadId) {
+        int tLen = (int) data[0] & 0xFF << 8;
+        tLen += (int) data[1] & 0xFF;
+        byte[] topic = Arrays.copyOfRange(data, 2, tLen);
+        ArrayList<Long> list = topicUserList.get(topic);
+        byte[] message = new byte[header.length + data.length];
+        System.arraycopy(header, 0, message, 0, header.length);
+        System.arraycopy(data, 0, message, header.length, data.length);
+        for(int i = 0; i < list.size(); i++) {
+            threadSendList.put(list.get(i), message);
+        }
+        return;
     }
 
 
@@ -150,6 +173,15 @@ public class MQTTBroker implements Runnable{
 
     boolean additionalHeaderByte(byte data) {
         return ((data & 0x80) > 0 );
+    }
+
+    static void sendPublish(Long id, BufferedOutputStream out) throws IOException {
+        byte[] data;
+        if((data = threadSendList.get(id)) != null) {
+            sendMessage(data, out);
+            threadSendList.remove(id, data);
+
+        }
     }
 
     public static void main(String args[]) {
@@ -203,16 +235,10 @@ public class MQTTBroker implements Runnable{
                 long threadId = Thread.currentThread().getId();
                 running = parse(header, data, out, threadId);
 
+                sendPublish(threadId, out);
             } catch (Exception e) {
                 System.err.println(e);
-            }/*finally{
-            try {
-                connect.close(); // we close socket connection
-            } catch (Exception e) {
-                System.err.println("Error closing stream : " + e.getMessage());
             }
-            System.out.println("Connection closed.\n");
-        }*/
         }
         try {
             connect.close(); // we close socket connection
