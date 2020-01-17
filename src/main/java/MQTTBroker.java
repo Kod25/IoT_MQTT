@@ -15,9 +15,9 @@ public class MQTTBroker implements Runnable{
 
     private Socket connect;
 
-    public static HashMap<byte[], ArrayList<Long>> topicUserList = new HashMap<byte[], ArrayList<Long>> ();
+    public static HashMap<String, ArrayList<Long>> topicUserList = new HashMap<String, ArrayList<Long>> ();
 
-    static HashMap<Long, byte[]> threadSendList = new HashMap<Long, byte[]> ();
+    static HashMap<Long, String> threadSendList = new HashMap<Long, String> ();
 
     public MQTTBroker(Socket c){
         connect = c;
@@ -67,19 +67,13 @@ public class MQTTBroker implements Runnable{
                 sendMessage(createConAck(), out);
                 break;
             case 3:
-                System.out.println("Message type: " + type);
-                System.out.println("Thread: " + threadId);
                 parsePublishMessage(header, data, threadId);
                 break;
             case 8:
-                System.out.println("Message type: " + type);
-                System.out.println("Thread: " + threadId);
                 byte[] subId = parseSubscribeMessage(data, threadId);
                 sendMessage(createSubAck(subId), out);
                 break;
             case 10:
-                System.out.println("Message type: " + type);
-                System.out.println("Thread: " + threadId);
                 byte[] unSubId = parseUnSubscribeMessage(header, data, threadId);
                 sendMessage(createUnSubAck(unSubId), out);
                 break;
@@ -121,10 +115,11 @@ public class MQTTBroker implements Runnable{
             tLen += (int) data[pos + 1] & 0xFF;
             pos += 2;
             byte[] topic = Arrays.copyOfRange(data, pos, pos + tLen);
+            String topicString = new String(topic);
             pos += tLen;
-            ArrayList<Long> list = topicUserList.get(topic);
+            ArrayList<Long> list = topicUserList.get(topicString);
             list.remove(threadId);
-            topicUserList.replace(topic, list);
+            topicUserList.replace(topicString, list);
         }
         return id;
     }
@@ -134,36 +129,22 @@ public class MQTTBroker implements Runnable{
         id[0] = data[0];
         id[1] = data[1];
         int pos = 2;
-        /*
         while(pos<data.length) {
             int tLen = (int) data[pos] & 0xFF << 8;
             tLen += (int) data[pos+1] & 0xFF;
             pos += 2;
-            byte[] topic = Arrays.copyOfRange(data, pos, tLen);
+            byte[] topic = Arrays.copyOfRange(data, pos, pos + tLen);
+            String topicString = new String(topic);
             byte qos = (byte) 0;
             pos += tLen+1;
-            ArrayList<Long> list;
-            if((list = topicUserList.get(topic)) != null) {
+            if(topicUserList.containsKey(topicString)) {
+                ArrayList<Long> list = new ArrayList<Long>();
                 list.add(threadId);
-                topicUserList.replace(topic, list);
+                topicUserList.replace(topicString, list);
                 id[2] = (byte) 0x00;
             } else {
                 id[2] = (byte) 0x80;
             }
-        }
-        */
-        byte[] topic = Arrays.copyOfRange(data, 4, data.length-1);
-        System.out.println(new String(topic));
-        System.out.println("len " + data.length);
-        byte qos = (byte) 0;
-        System.out.println(topicUserList.get(topic));
-        if(topicUserList.containsKey(topic)) {
-            ArrayList<Long> list = topicUserList.get(topic);
-            list.add(threadId);
-            topicUserList.replace(topic, list);
-            id[2] = (byte) 0;
-        } else {
-            id[2] = (byte) 128;
         }
         return id;
     }
@@ -181,29 +162,23 @@ public class MQTTBroker implements Runnable{
         }
         int tLen = (int) data[0] & 0xFF << 8;
         tLen += (int) data[1] & 0xFF;
-        byte[] topic = Arrays.copyOfRange(data, 2, tLen);
-        ArrayList<Long> list= topicUserList.get(topic);
-        //System.out.println(topicUserList.get(topic));
-        if(!topicUserList.containsKey(topic)){
+        byte[] topic = Arrays.copyOfRange(data, 2, 2 + tLen);
+        String topicString = new String(topic);
+        ArrayList<Long> list = topicUserList.get(topicString);
+        if(!topicUserList.containsKey(topicString)){
             ArrayList<Long> test = new ArrayList<Long>();
             test.add(threadId);
-            test.add((long) 5);
-            System.out.println(test);
-            topicUserList.put(topic, test);
-            System.out.println(topicUserList.get(topic));
+            topicUserList.put(topicString, test);
             return;
         }
-
-        System.out.println("AsssA");
         byte[] message = new byte[trueHeader.length + data.length];
 
         System.arraycopy(header, 0, message, 0, trueHeader.length);
         System.arraycopy(data, 0, message, trueHeader.length, data.length);
-        System.out.println(trueHeader.length);
-        System.out.println(message[2]);
+        String messageString = new String(message);
         if(list != null) {
             for (int i = 0; i < list.size(); i++) {
-                threadSendList.put(list.get(i), message);
+                threadSendList.put(list.get(i), messageString);
             }
         }
         return;
@@ -222,9 +197,10 @@ public class MQTTBroker implements Runnable{
     }
 
     static void sendPublish(Long id, BufferedOutputStream out) throws IOException {
-        byte[] data;
-        if((data = threadSendList.get(id)) != null) {
-            sendMessage(data, out);
+        if(threadSendList.containsKey(id)) {
+            String data = threadSendList.get(id);
+            byte[] sendData = data.getBytes();
+            sendMessage(sendData, out);
             threadSendList.remove(id, data);
 
         }
