@@ -15,7 +15,7 @@ public class MQTTBroker implements Runnable{
 
     private Socket connect;
 
-    static HashMap<byte[], ArrayList<Long>> topicUserList = new HashMap<byte[], ArrayList<Long>> ();
+    public static HashMap<byte[], ArrayList<Long>> topicUserList = new HashMap<byte[], ArrayList<Long>> ();
 
     static HashMap<Long, byte[]> threadSendList = new HashMap<Long, byte[]> ();
 
@@ -134,6 +134,7 @@ public class MQTTBroker implements Runnable{
         id[0] = data[0];
         id[1] = data[1];
         int pos = 2;
+        /*
         while(pos<data.length) {
             int tLen = (int) data[pos] & 0xFF << 8;
             tLen += (int) data[pos+1] & 0xFF;
@@ -149,6 +150,20 @@ public class MQTTBroker implements Runnable{
             } else {
                 id[2] = (byte) 0x80;
             }
+        }
+        */
+        byte[] topic = Arrays.copyOfRange(data, 4, data.length-1);
+        System.out.println(new String(topic));
+        System.out.println("len " + data.length);
+        byte qos = (byte) 0;
+        System.out.println(topicUserList.get(topic));
+        if(topicUserList.containsKey(topic)) {
+            ArrayList<Long> list = topicUserList.get(topic);
+            list.add(threadId);
+            topicUserList.replace(topic, list);
+            id[2] = (byte) 0;
+        } else {
+            id[2] = (byte) 128;
         }
         return id;
     }
@@ -167,11 +182,18 @@ public class MQTTBroker implements Runnable{
         int tLen = (int) data[0] & 0xFF << 8;
         tLen += (int) data[1] & 0xFF;
         byte[] topic = Arrays.copyOfRange(data, 2, tLen);
-        ArrayList<Long> list;
-        if((list = topicUserList.get(topic)) != null){
-            topicUserList.put(topic, new ArrayList<Long>());
+        ArrayList<Long> list= topicUserList.get(topic);
+        //System.out.println(topicUserList.get(topic));
+        if(!topicUserList.containsKey(topic)){
+            ArrayList<Long> test = new ArrayList<Long>();
+            test.add(threadId);
+            test.add((long) 5);
+            System.out.println(test);
+            topicUserList.put(topic, test);
+            System.out.println(topicUserList.get(topic));
             return;
         }
+
         System.out.println("AsssA");
         byte[] message = new byte[trueHeader.length + data.length];
 
